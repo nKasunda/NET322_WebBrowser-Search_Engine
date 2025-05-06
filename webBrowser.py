@@ -4,11 +4,13 @@ This program is to be a web browser and a search engine to handle http operation
 """
 import sys
 import urllib.parse
+import os
 
-from PyQt5.QtCore import QUrl
+from PyQt5.QtCore import QUrl, Qt, QStringListModel
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWebEngineWidgets import QWebEngineView
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLineEdit, QApplication, QHBoxLayout, QTextEdit, QPushButton
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLineEdit, QApplication, QHBoxLayout, QTextEdit, QPushButton, \
+    QCompleter
 
 server_url = "http://127.0.0.1:8080"
 
@@ -17,43 +19,116 @@ class webBrowser(QWidget):
         super().__init__()
         self.setWindowTitle("BLACKPEARL")
         self.showMaximized()
+        self.directory = localDirectory
         self.browserUI()
+
 
     def browserUI(self):
         layout = QVBoxLayout()
 
-        # Top bar layout (Back button + URL input)
+        # navigation and search bar layout
         topBar = QHBoxLayout()
 
-        # Back button
-        backButton = QPushButton("←")
+        # Back buttons
+        backButton = QPushButton("<")
         backButton.setToolTip("Click to go back")
+        backButton.setFixedSize(20, 20)
         topBar.addWidget(backButton)
 
-        # URL input
+        # Forward button
+        forwardButton = QPushButton(">")
+        forwardButton.setToolTip("Click to go forward")
+        forwardButton.setFixedSize(20,20)
+        topBar.addWidget(forwardButton)
+
+        # Reload button
+        self.reloadButton = QPushButton()
+        self.reloadIcon = QIcon("assets/reload_icon.svg")
+        self.reloadButton.setIcon(self.reloadIcon)
+        self.reloadButton.setToolTip("Reload page")
+        self.reloadButton.setFixedSize(20, 20)
+        topBar.addWidget(self.reloadButton)
+
+        # URL or Search query input
         self.url_input = QLineEdit()
-        self.url_input.setPlaceholderText("Type a URL")
+        self.url_input.setPlaceholderText("Search or Type a URL")
         searchIcon = QIcon("assets/search_icon.svg")
         self.url_input.addAction(searchIcon, QLineEdit.LeadingPosition)
         self.url_input.returnPressed.connect(self.defaultConfig)
+
+        # A local file dropdown menu
+        self.dropDown = QCompleter()
+        self.dropDown.setCaseSensitivity(False)
+        self.url_input.setCompleter(self.dropDown)
+        self.dropDown.setFilterMode(Qt.MatchContains)
+
+        self.model = QStringListModel()
+        self.dropDown.setModel(self.model)
+
+        self.url_input.textChanged.connect(self.updateDropDown)
+
         topBar.addWidget(self.url_input)
 
         layout.addLayout(topBar)
 
+        # Sets webview, back, forward, reload and cancel buttons
+        # Calls pageLoadStart & pageLoadEnd when a page begins and finishes loading respectively
         self.responseWindow = QWebEngineView()
+        self.responseWindow.urlChanged.connect(self.updateUrlBar)
         backButton.clicked.connect(self.responseWindow.back)
+        forwardButton.clicked.connect(self.responseWindow.forward)
+        self.reloadButton.clicked.connect(self.responseWindow.reload)
+        self.responseWindow.loadStarted.connect(self.pageLoadStart)
+        self.responseWindow.loadFinished.connect(self.pageLoadEnd)
         layout.addWidget(self.responseWindow)
 
 
         self.setLayout(layout)
-    # handles the default configurations of looking for the query locally initially
+
+        # Traversing through the local directories
+        self.allFiles = []
+        for root, dirs, files in os.walk(self.directory):
+            for file in files:
+                fullPath = os.path.relpath(os.path.join(root, file), self.directory)
+                self.allFiles.append(fullPath)
+
+    # Page Reload and Cancel button transitions
+    def pageLoadStart(self):
+        cancelIcon = QIcon("assets/cancel_icon.svg")
+        self.reloadButton.setIcon(cancelIcon)
+        self.reloadButton.setToolTip("Stop loading")
+        self.reloadButton.clicked.disconnect()
+        self.reloadButton.clicked.connect(self.responseWindow.stop)
+
+    def pageLoadEnd(self):
+        self.reloadButton.setIcon(self.reloadIcon)
+        self.reloadButton.setToolTip("Reload page")
+        self.reloadButton.clicked.disconnect()
+        self.reloadButton.clicked.connect(self.responseWindow.reload)
+
+
+    def updateDropDown(self, text):
+        if not text:
+            self.model.setStringList([])
+            return
+        filtered = [
+            f for f in self.allFiles
+            if text.lower() in os.path.basename(f).lower()
+        ]
+        self.model.setStringList(filtered)
+
+    # 
+
+    # handles the default configurations if the query  not found locally
     def  defaultConfig(self):
         query = self.url_input.text().strip()
-        localDoc = f"{server_url}/templates/{query}.html"
+        localDoc = f"{server_url}/{query}"
 
         # if the query is not found locally
         def defaultPageLoad(status):
-            if not status:
+            if status:
+                self.url_input.setText(localDoc)
+            else:
                 htmlDefault = f"""
                 <html> 
                 <head><title> 404 Not Found</title></head>
@@ -73,6 +148,7 @@ class webBrowser(QWidget):
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
+    localDirectory = os.path.dirname(os.path.abspath(__file__))
 
     window = webBrowser()
     window.show()
