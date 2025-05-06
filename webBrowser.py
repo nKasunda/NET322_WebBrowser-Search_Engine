@@ -12,6 +12,7 @@ from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLineEdit, QApplication, QHBoxLayout, QTextEdit, QPushButton, \
     QCompleter
 
+# The local server url
 server_url = "http://127.0.0.1:8080"
 
 class webBrowser(QWidget):
@@ -117,7 +118,9 @@ class webBrowser(QWidget):
         ]
         self.model.setStringList(filtered)
 
-    # 
+    # Updating the search bar url
+    def updateUrlBar(self, url):
+        self.url_input.setText(url.toString())
 
     # handles the default configurations if the query  not found locally
     def  defaultConfig(self):
@@ -126,9 +129,7 @@ class webBrowser(QWidget):
 
         # if the query is not found locally
         def defaultPageLoad(status):
-            if status:
-                self.url_input.setText(localDoc)
-            else:
+            if not status:
                 htmlDefault = f"""
                 <html> 
                 <head><title> 404 Not Found</title></head>
@@ -145,6 +146,7 @@ class webBrowser(QWidget):
 
         self.responseWindow.loadFinished.connect(defaultPageLoad)
         self.responseWindow.load(QUrl(localDoc))
+
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
